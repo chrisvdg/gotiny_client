@@ -1,6 +1,8 @@
 package gotinyclient
 
 import (
+	"fmt"
+	"io/ioutil"
 	"net/http"
 
 	gotiny "github.com/chrisvdg/gotiny/backend"
@@ -16,6 +18,11 @@ var (
 	ErrWriteUnauthorized = errors.New("unauthorized, write access token may be invalid")
 	// ErrInvalidRequest represents an error where an invalid request was made
 	ErrInvalidRequest = errors.New("invalid request")
+)
+
+const (
+	authHeader   = "Authorization"
+	bearerPrefix = "bearer"
 )
 
 var (
@@ -45,12 +52,45 @@ type Client struct {
 	baseURL    string
 	readToken  string
 	writeToken string
+	http       *http.Client
 }
 
-func (c *Client) getReq() (*response, error) {
+func (c *Client) do(req *http.Request) (*response, error) {
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to send request to gotiny server")
+	}
+	defer resp.Body.Close()
 
-	return nil, nil
+	r := &response{}
+	r.body, err = ioutil.ReadAll(resp.Request.Body)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to read response body")
+	}
+	r.httpResp = resp
+
+	return r, nil
 }
+
+func (c *Client) addAuthHeader(auth authType, req *http.Request) {
+	switch auth {
+	case authRead:
+		if c.readToken != "" {
+			req.Header.Add(authHeader, fmt.Sprintf("%s %s", bearerPrefix, c.readToken))
+		}
+	case authWrite:
+		if c.writeToken != "" {
+			req.Header.Add(authHeader, fmt.Sprintf("%s %s", bearerPrefix, c.writeToken))
+		}
+	}
+}
+
+type authType int
+
+const (
+	authRead authType = iota + 1
+	authWrite
+)
 
 type response struct {
 	httpResp *http.Response
