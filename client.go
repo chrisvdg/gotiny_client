@@ -12,12 +12,16 @@ import (
 var (
 	// ErrEntryNotFound represents an error where a tiny url entry could not be found
 	ErrEntryNotFound = errors.New("tiny URL entry not found")
-	// ErrReadUnauthorized represents an error where a request with read permissions failed to authorized
+	// ErrUnauthorized represents an error where a request failed to authorize
+	ErrUnauthorized = errors.New("request unauthorized")
+	// ErrReadUnauthorized represents an error where a request with read permissions failed to authorize
 	ErrReadUnauthorized = errors.New("unauthorized, read access token may be invalid")
-	// ErrWriteUnauthorized represents an error where a request with write permissions failed to authorized
+	// ErrWriteUnauthorized represents an error where a request with write permissions failed to authorize
 	ErrWriteUnauthorized = errors.New("unauthorized, write access token may be invalid")
-	// ErrInvalidRequest represents an error where an invalid request was made
-	ErrInvalidRequest = errors.New("invalid request")
+	// ErrBadRequest represents an error where a request was made with bad parameters
+	ErrBadRequest = errors.New("bad request")
+	// UnauthorizedErrors is a list of errors that represent unauthorzied errors
+	UnauthorizedErrors = []error{ErrUnauthorized, ErrReadUnauthorized, ErrWriteUnauthorized}
 )
 
 const (
@@ -72,6 +76,19 @@ func (c *Client) do(req *http.Request) (*response, error) {
 	return r, nil
 }
 
+func (c *Client) checkDefaultErrors(res response) error {
+	switch res.httpResp.StatusCode {
+	case http.StatusUnauthorized:
+		return ErrUnauthorized
+	case http.StatusNotFound:
+		return ErrEntryNotFound
+	case http.StatusBadRequest:
+		return ErrBadRequest
+	}
+
+	return nil
+}
+
 func (c *Client) addAuthHeader(auth authType, req *http.Request) {
 	switch auth {
 	case authRead:
@@ -95,4 +112,15 @@ const (
 type response struct {
 	httpResp *http.Response
 	body     []byte
+}
+
+// IsUnauthorized checks wether provided error is an authorized error
+func IsUnauthorized(err error) bool {
+	for _, r := range UnauthorizedErrors {
+		if errors.Cause(err) == r {
+			return true
+		}
+	}
+
+	return false
 }
