@@ -79,7 +79,7 @@ func (c *Client) UpdateEntry(entryID, entryURL string) error {
 		return errors.Wrap(err, "request create new entry failed")
 	}
 
-	return c.checkDefaultErrors(res, req, nil, false)
+	return c.checkDefaultErrors(res, req, nil, true)
 }
 
 // GetEntry fetches the entry information of provided ID
@@ -97,7 +97,7 @@ func (c *Client) GetEntry(entryID string) (TinyURL, error) {
 		return emptyResult, errors.Wrap(err, "request getting entry failed")
 	}
 
-	err = c.checkDefaultErrors(res, req, nil, false)
+	err = c.checkDefaultErrors(res, req, nil, true)
 	if err != nil {
 		return emptyResult, err
 	}
@@ -118,7 +118,7 @@ func (c *Client) DeleteEntry(entryID string) error {
 		return errors.Wrap(err, "request getting entry failed")
 	}
 
-	return c.checkDefaultErrors(res, req, nil, false)
+	return c.checkDefaultErrors(res, req, nil, true)
 }
 
 func formatEntryList(data []byte) ([]TinyURL, error) {
