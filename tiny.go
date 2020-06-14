@@ -1,9 +1,47 @@
 package gotinyclient
 
+import (
+	"encoding/json"
+	"net/http"
+
+	"github.com/pkg/errors"
+)
+
+const (
+	resourceTiny = "tiny"
+)
+
 // ListEntries lists all tiny URL entries
 func (c *Client) ListEntries() ([]TinyURL, error) {
+	url := c.getReqURL(resourceTiny)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create request to list entries")
+	}
+	c.addAuthHeader(authRead, req)
+	res, err := c.do(req)
+	if err != nil {
+		return nil, errors.Wrap(err, "request listing entries failed")
+	}
 
-	return nil, nil
+	err = c.checkDefaultErrors(res, req, nil, false)
+	if err != nil {
+		return nil, err
+	}
+
+	return formatEntryList(res.body)
+}
+
+func formatEntryList(data []byte) ([]TinyURL, error) {
+	result := []TinyURL{}
+	if string(data) != "" && string(data) != "[]" {
+		err := json.Unmarshal(data, &result)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to unmarshal response to entry list")
+		}
+	}
+
+	return result, nil
 }
 
 // CreateEntry creates a new tiny URL entry

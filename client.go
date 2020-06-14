@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"path"
 
 	gotiny "github.com/chrisvdg/gotiny/backend"
 	"github.com/pkg/errors"
@@ -22,11 +23,14 @@ var (
 	ErrBadRequest = errors.New("bad request")
 	// UnauthorizedErrors is a list of errors that represent unauthorzied errors
 	UnauthorizedErrors = []error{ErrUnauthorized, ErrReadUnauthorized, ErrWriteUnauthorized}
+	// ErrUnexpectedCode represents an error where a request returned an unexpected error
+	ErrUnexpectedCode = errors.New("recieved unexpected http code")
 )
 
 const (
 	authHeader   = "Authorization"
 	bearerPrefix = "bearer"
+	apiPath      = "api"
 )
 
 var (
@@ -48,6 +52,11 @@ func New(baseURL, readToken, writeToken string) (*Client, error) {
 		baseURL:    baseURL,
 		readToken:  readToken,
 		writeToken: writeToken,
+		http: &http.Client{
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
 	}, nil
 }
 
@@ -59,6 +68,13 @@ type Client struct {
 	http       *http.Client
 }
 
+// getReqURL returns the full API call address using the base URL
+// and appending the provided path
+func (c *Client) getReqURL(resourcePath string) string {
+	return fmt.Sprintf("%s/%s", c.baseURL, path.Join(apiPath, resourcePath))
+}
+
+// do executed the provided http request and returns the response with read body
 func (c *Client) do(req *http.Request) (*response, error) {
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -67,7 +83,7 @@ func (c *Client) do(req *http.Request) (*response, error) {
 	defer resp.Body.Close()
 
 	r := &response{}
-	r.body, err = ioutil.ReadAll(resp.Request.Body)
+	r.body, err = ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to read response body")
 	}
@@ -76,19 +92,31 @@ func (c *Client) do(req *http.Request) (*response, error) {
 	return r, nil
 }
 
-func (c *Client) checkDefaultErrors(res response) error {
+// checkDefaultErrors default response error check
+func (c *Client) checkDefaultErrors(res *response, req *http.Request, expectedCodes []int, isResource bool) error {
 	switch res.httpResp.StatusCode {
 	case http.StatusUnauthorized:
 		return ErrUnauthorized
 	case http.StatusNotFound:
-		return ErrEntryNotFound
+		if isResource {
+			return ErrEntryNotFound
+		}
+		return errors.Errorf("Path %s not found", req.URL.String())
 	case http.StatusBadRequest:
-		return ErrBadRequest
+		return errors.Wrap(ErrBadRequest, string(res.body))
+	default:
+		if len(expectedCodes) == 0 {
+			expectedCodes = successCodes
+		}
+		if !isExpectedCode(expectedCodes, res.httpResp.StatusCode) {
+			return errors.Wrap(ErrUnexpectedCode, string(res.body))
+		}
 	}
 
 	return nil
 }
 
+// addAuthHeader adds authorization header if configured
 func (c *Client) addAuthHeader(auth authType, req *http.Request) {
 	switch auth {
 	case authRead:
@@ -118,6 +146,16 @@ type response struct {
 func IsUnauthorized(err error) bool {
 	for _, r := range UnauthorizedErrors {
 		if errors.Cause(err) == r {
+			return true
+		}
+	}
+
+	return false
+}
+
+func isExpectedCode(expCodes []int, code int) bool {
+	for _, c := range expCodes {
+		if c == code {
 			return true
 		}
 	}
