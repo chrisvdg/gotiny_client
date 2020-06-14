@@ -37,6 +37,7 @@ var (
 	successCodes = []int{
 		http.StatusOK,
 		http.StatusCreated,
+		http.StatusNoContent,
 	}
 )
 
@@ -74,8 +75,15 @@ func (c *Client) getReqURL(resourcePath string) string {
 	return fmt.Sprintf("%s/%s", c.baseURL, path.Join(apiPath, resourcePath))
 }
 
+func (c *Client) getReqURLWithID(resourcePath, resourceID string) string {
+	return c.getReqURL(path.Join(resourcePath, resourceID))
+}
+
 // do executed the provided http request and returns the response with read body
 func (c *Client) do(req *http.Request) (*response, error) {
+	if req.Method == "POST" {
+		req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	}
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to send request to gotiny server")
